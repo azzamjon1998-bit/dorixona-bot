@@ -1,2 +1,2 @@
-[phases.setup]
-nixPkgs = ["python311", "rustc", "cargo"]
+[phases.install]
+cmds = ["pip install --prefer-binary -r requirements.txt"]
