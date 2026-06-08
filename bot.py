@@ -1,6 +1,6 @@
 import asyncio
-import sqlite3
 import os
+import psycopg2
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
@@ -10,6 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -20,53 +21,56 @@ class RegisterState(StatesGroup):
 class BronState(StatesGroup):
     waiting_for_dori = State()
 
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
+
 def init_db():
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS users (telegram_id INTEGER PRIMARY KEY, ism TEXT NOT NULL)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS bronlar (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER, dori_nomi TEXT NOT NULL, sana TEXT DEFAULT (datetime('now', 'localtime')), FOREIGN KEY (telegram_id) REFERENCES users(telegram_id))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS users (telegram_id BIGINT PRIMARY KEY, ism TEXT NOT NULL)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS bronlar (id SERIAL PRIMARY KEY, telegram_id BIGINT, dori_nomi TEXT NOT NULL, sana TIMESTAMP DEFAULT NOW())""")
     conn.commit()
     conn.close()
 
 def get_user(telegram_id):
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT ism FROM users WHERE telegram_id = ?", (telegram_id,))
+    c.execute("SELECT ism FROM users WHERE telegram_id = %s", (telegram_id,))
     row = c.fetchone()
     conn.close()
     return row[0] if row else None
 
 def save_user(telegram_id, ism):
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO users (telegram_id, ism) VALUES (?, ?)", (telegram_id, ism))
+    c.execute("INSERT INTO users (telegram_id, ism) VALUES (%s, %s) ON CONFLICT (telegram_id) DO UPDATE SET ism = %s", (telegram_id, ism, ism))
     conn.commit()
     conn.close()
 
 def add_bron(telegram_id, dori_nomi):
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("INSERT INTO bronlar (telegram_id, dori_nomi) VALUES (?, ?)", (telegram_id, dori_nomi))
+    c.execute("INSERT INTO bronlar (telegram_id, dori_nomi) VALUES (%s, %s)", (telegram_id, dori_nomi))
     conn.commit()
     conn.close()
 
 def get_bronlar(telegram_id):
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT id, dori_nomi, sana FROM bronlar WHERE telegram_id = ?", (telegram_id,))
+    c.execute("SELECT id, dori_nomi, sana FROM bronlar WHERE telegram_id = %s", (telegram_id,))
     rows = c.fetchall()
     conn.close()
     return rows
 
 def delete_bron(bron_id, telegram_id):
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("DELETE FROM bronlar WHERE id = ? AND telegram_id = ?", (bron_id, telegram_id))
+    c.execute("DELETE FROM bronlar WHERE id = %s AND telegram_id = %s", (bron_id, telegram_id))
     conn.commit()
     conn.close()
 
 def get_all_users():
-    conn = sqlite3.connect("dorixona.db")
+    conn = get_conn()
     c = conn.cursor()
     c.execute("SELECT telegram_id, ism FROM users")
     rows = c.fetchall()
